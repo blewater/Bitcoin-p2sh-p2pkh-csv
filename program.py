@@ -2,8 +2,9 @@
 Bitcoin script interfacing with Bitcoin core.
 """
 from bitcoinutils.setup import setup
-from bitcoinutils.transactions import Transaction, TxInput, TxOutput
+from bitcoinutils.transactions import Transaction, TxInput, TxOutput, Sequence
 from bitcoinutils.keys import P2pkhAddress, P2shAddress, PrivateKey, PublicKey
+from bitcoinutils.constants import TYPE_RELATIVE_TIMELOCK
 from subprocess import Popen, PIPE
 from bitcoinutils.script import Script
 from binascii import hexlify
@@ -143,15 +144,16 @@ class Common:
         epochlockperiod &= cls.SEQUENCE_LOCKTIME_MASK
 
         if epochlockperiod > 0:
-            lock_seconds = cls.SEQUENCE_LOCKTIME_TYPE_FLAG | epochlockperiod
-            # print('lock seconds: ' + str(lock_seconds))
-            return cls.get_int_to_little_endian_hex(lock_seconds)
+            print('lock seconds: ' + str(epochlockperiod))
+            return Sequence(TYPE_RELATIVE_TIMELOCK, epochlockperiod)
+
+        elif blockslockPeriod >= 0:
+
+            print('blocks to lock: ' + str(blockslockPeriod))
 
             # blocks even if zero as a default parameter to the csv script
-        elif blockslockPeriod >= 0:
-            blockslockPeriod &= cls.SEQUENCE_LOCKTIME_MASK
-            # print('blocks to lock: ' + str(blockslockPeriod))
-            return cls.get_int_to_little_endian_hex(blockslockPeriod)
+            return Sequence(TYPE_RELATIVE_TIMELOCK, blockslockPeriod)
+
         else:
             return 0
 
@@ -162,7 +164,7 @@ class Common:
         """
         if len(seq_number_in_hex.replace('0', '')) > 0:
             # Use csv operators
-            return Script([seq_number_in_hex[:4], 'OP_CHECKSEQUENCEVERIFY', 'OP_DROP',
+            return Script([seq_number_in_hex.for_script(), 'OP_CHECKSEQUENCEVERIFY', 'OP_DROP',
                            pub_key_to_obj.to_hex(),
                            'OP_DUP',
                            'OP_HASH160',
@@ -218,7 +220,7 @@ class Common:
         Great when method name are self explanatory
         """
         csv_args = cls.get_relative_time_seconds_blocks()
-        seq_number_in_hex = cls.get_seq_hex_from_conf(csv_args)
+        seq_number_in_hex = Sequence(TYPE_RELATIVE_TIMELOCK, csv_args)
 
         print("seconds to wait: " +
               str(csv_args[0]) + ", blocks to wait: " + str(csv_args[1]))
