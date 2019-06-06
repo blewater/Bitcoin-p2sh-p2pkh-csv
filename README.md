@@ -4,18 +4,28 @@
 
 **1.** Create a P2SH address where all funds sent to it should be locked for N time(*) after its creation; other than the time locking part the redeem script is equivalent to a P2PKH transaction. Thus it generates a P2SH wrapped P2PKH transaction.
 
+* Accepts a public key for the P2PKH part of the redeem script in program.conf file.
+* Displays the P2SH address.
+
 <details>
 <summary>(*) Supports relative time delays of both blocks or seconds:</summary>
 Seconds 128 * 512 blocks of time. The wait configuration value of 0 allows for immediate successful submission.</details>
 
 **2.** Spend the funds from the generated P2SH address. Find the UTXOs paid to a P2SH address and transfer their Bitcoin value to the target P2PKH_Addr_To addresss.
 
+- Accepts a future time period and a private key (to recreate the redeem script as above and also use to unlock the P2PKH part).
+- Accepts a P2SH address to get the funds from one or multiple UTXO transactions.
+- Accepts a P2PKH address to sent the funds to.
+- Calculate the appropriate fees.
+- Sends all funds of the local wallet from the P2SH address to the provided P2PKH address.
+- Displays the submitted transaction id.
+
 __Precondition: bitcoin-cli needs to in the path otherwise, this humble deliverable can't find utxo or submit transactions.__
 
 Configuration is provided in program.conf. See configuration comments for details.
 
 Both functions 1 and 2 run from the same script: *python program.py*
-If the configuration value RunFunction == **1**, then only the redeem script gets created. For RunFunction value == **2, both functions 1 and 2's functionality run.
+If the configuration value RunFunction == **1**, then only the redeem script gets created. For RunFunction value == **2**, both functions 1 and 2's functionality run.
 
 _You may run it in the same path with program.conf_
 
