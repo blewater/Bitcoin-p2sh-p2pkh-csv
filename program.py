@@ -1,129 +1,5 @@
 """
-Summary: Find Utxos paid to a P2SH address and transfer their btc to the lucky P2PKH_Addr_To addresss.
-Supports both blocks and relative seconds(*) wait configuration values being 0
-for confirming immediate successful submission.
---or setting the relative blocks and relative seconds(*) waiting value.
-(*)Though testing the seconds wait function seemed impractical as to wait for value greater
-than 128 * 512 blocks of time.
-(**) Using a public key in program 1 has not been tested. There's related comment.
-
--- Uses the bitcoin-utils lib. -- Great library with a couple of glitches. See below ;)
-Also tested with python-bitcoinlib but found issues with its DER encoding during submissions.
-
-*** Precondition: bitcoin-cli needs to in the path otherwise,
-this humble deliverable can't find utxo or submit transactions. ***
-
-Configuration is provided in program.conf. See related content for details.
-
-Both program 1 and 2 run from the same file: python program.py
-If the configuration value RunProgram == 1, then only the redeem script gets created.
-For RunProgram value == 2, both program 1 and 2's functionality run.
-
-You may run it in the same path with program.conf
-
-    python program.py
-
-This assignment has been tested with bitcoin node 13.1 in ubuntu, 13.2 windows.
-
-Yes it works for single and multiple input UTXO transactions with the following exceptions:
-
-1. Does not support block wait value of 1...128 I think. For those submissions the bitcoin node
-responds with "mandatory-script-verify-flag-failed (Non-canonical DER signature)" after
-the wait period is over. However, tested ok, and submits transactions successfully with 130 and above.
-Did not test values of 129, 128 and many intermediate in the range of 1-128.
-I did not realize this out initially that it might be related to the signed integer issue
-of the library. I'd love your feedback if it's related to my code.
-I always pad zeroes to 4 or 8 total length.
-
-2. Some input UTXO transaction ids raise library exception and crash
-during the signing of the input transactions.
-After investigating it, I could't find anything related to my code. Not using those offending
-UTXO transaction ids makes the failure go away :)
-
-Here's the library exception:
-  File "/Python3/lib/site-packages/bitcoinutils\keys.py", line 314, in sign_input
-    new_S = unhexlify( format(new_S_as_bigint, 'x') )
-binascii.Error: Odd-length string
-
-That also took time before I gave up and would love
-feedback if it's mine issue.
-
-------------------------------------------------------------------------------------
-Example Submission 1:
-
-Running Program *** 2 ***
-
-seconds to wait: 0, blocks to wait: 0
-sequence number in little endian format: 00000000
-
-redeem hex: 2103815c6a6e52bc6d05e6678c313a3495e877050715cd9057f6be071924d28ed46076a914266ae37985ef74e1d6089897639578c0c990bd0a88ac
-Redeem script generated P2SH addr: 2NFbu9tEGnLKZYQtxNgiA7DSeN61hDe9SkA
-
-For the P2SH address: 2NFbu9tEGnLKZYQtxNgiA7DSeN61hDe9SkA found these UTXOs:
-
-Trx id: d2c9a1fe7164b7525670ad76588092454751e29f8234e76a67875f96331bc0a4, vout: 0 amount: 1.1
-
-
-Size in KB: 0.298828125, estimated btc fees: 2.9882812500000002e-06, total amount to be transferred: 1.1
-
-
-Signed raw transaction:
-0200000001a4c01b33965f87676ae734829fe251474592805876ad705652b76471fea1c9d2000000008447304402205f1bf7918f70b0c82bf495309a3c104d8d3a3edc7789b79537b8419eb322dcc6022017ea79a4007502d4de305112b91293a4b2e336fb00535509b39038112d141406013b2103815c6a6e52bc6d05e6678c313a3495e877050715cd9057f6be071924d28ed46076a914266ae37985ef74e1d6089897639578c0c990bd0a88ac000000000155768e06000000001976a914266ae37985ef74e1d6089897639578c0c990bd0a88ac00000000
-
-Submitting raw transaction to local node...
-
-Success or previously submitted; trx id: 4a48c21046b8e068ccfc992b14031f9cdc536ea1a3bd82a1cf411b85774943bc
-
-------------------------------------------------------------------------------------
-Example submission 2:
-λ python program.py
-
-Running Program *** 2 ***
-
-seconds to wait: 0, blocks to wait: 129
-sequence number in little endian format: 81000000
-
-redeem hex: 028100b2752103815c6a6e52bc6d05e6678c313a3495e877050715cd9057f6be071924d28ed46076a914266ae37985ef74e1d6089897639578c0c990bd0a88ac
-Redeem script generated P2SH addr: 2NESVpGidmToyL7ZhQYmdJUdN6uLKmTMnKp
-
-For the P2SH address: 2NESVpGidmToyL7ZhQYmdJUdN6uLKmTMnKp found these UTXOs:
-
-Trx id: 7d3718fd53e887e580dffe659e6e562e32aa5abed86625def8f8b0835d2760da, vout: 1 amount: 1.1
-Trx id: 31649c117b8c5daca6f497a0cf45f45676ff3c3a39442c62f5f41a283430a547, vout: 0 amount: 1.1
-Trx id: 94f30f847775e3ddef43f617e08819cd9b7c8751f6eab1451b345562afe92d64, vout: 0 amount: 1.1
-
-
-Size in KB: 0.587109375, estimated btc fees: 5.871093750000001e-06, total amount to be transferred: 3.3000000000000003
-
-
-Signed raw transaction:
-0200000003da60275d83b0f8f8de2566d8be5aaa322e566e9e65fedf80e587e853fd18377d01000000894730440220702dd7585f66abebb87d81e187006d9ee62300b79cc82d6633796cae2482d6ea02201cf6e900cd4f3d7c8239a3989336eef0e65f8ad6abd80d14092fb2957a3904d50140028100b2752103815c6a6e52bc6d05e6678c313a3495e877050715cd9057f6be071924d28ed46076a914266ae37985ef74e1d6089897639578c0c990bd0a88ac8100000047a53034281af4f5622c44393a3cff7656f445cfa097f4a6ac5d8c7b119c6431000000008a483045022100800f4aa1cc48e08ff2ce3918f79e545db1336f65ffa5d2aebc8fcc7ab60c6f7d022047a7b2553ebfeea53dadd0f2a85fbeefda5ab1c918541805be3731475631811f0140028100b2752103815c6a6e52bc6d05e6678c313a3495e877050715cd9057f6be071924d28ed46076a914266ae37985ef74e1d6089897639578c0c990bd0a88ac81000000642de9af6255341b45b1eaf651877c9bcd1988e017f643efdde37577840ff39400000000894730440220110c55dff749806cc47390fd5824076cd3fce68e00c81993810c164a564e6573022008e3880b90b8c80680e5046126db545b9f82462712c03847dae5f623cb1e4e120140028100b2752103815c6a6e52bc6d05e6678c313a3495e877050715cd9057f6be071924d28ed46076a914266ae37985ef74e1d6089897639578c0c990bd0a88ac81000000013564ab13000000001976a914266ae37985ef74e1d6089897639578c0c990bd0a88ac00000000
-
-Submitting raw transaction to local node...
-
-error code: -26
-error message:
-64: non-BIP68-final
-64: non-BIP68-final means still time/blocked locked. You may resubmit.
-
-
-------------------------------------------------------------------------------------
-Example Submission 3:
-
-λ python program.py
-
-Running Program *** 2 ***
-
-seconds to wait: 0, blocks to wait: 129
-sequence number in little endian format: 81000000
-
-redeem hex: 028100b2752103815c6a6e52bc6d05e6678c313a3495e877050715cd9057f6be071924d28ed46076a914266ae37985ef74e1d6089897639578c0c990bd0a88ac
-Redeem script generated P2SH addr: 2NESVpGidmToyL7ZhQYmdJUdN6uLKmTMnKp
-
-For the P2SH address: 2NESVpGidmToyL7ZhQYmdJUdN6uLKmTMnKp found these UTXOs:
-
-No UTXOs found. Nothing to do!
-
+Bitcoin script interfacing with Bitcoin core.
 """
 from bitcoinutils.setup import setup
 from bitcoinutils.transactions import Transaction, TxInput, TxOutput
@@ -178,7 +54,7 @@ class Common:
     # Config Filename
     Configuration_File = 'program.conf'
 
-    # Config Section for Shared values for programs
+    # Config Section for Shared values for both program functions.
     Common_Conf_Section = 'Common'
 
     # Init statically the config
@@ -366,12 +242,12 @@ def get_redeem_pub_key_obj():
     # Using a public key has not been tested.
     # Support for public from user submitted text looks like it's limited in bitcoin-utils lib.
     #
-    program_section = 'Function 1'
+    function_section = 'Function 1'
 
     private_key_to = Common.get_config_value(
-        program_section, 'private_key_to')
+        function_section, 'private_key_to')
     public_key_to = Common.get_config_value(
-        program_section, 'public_key_to')
+        function_section, 'public_key_to')
 
     if len(private_key_to) > 0:
         redeem_pub_key_obj = Common.get_pub_key_from_priv_key_obj(
@@ -386,7 +262,7 @@ def get_redeem_pub_key_obj():
         sys.exit('No private or public key provided in configuration of function 1!')
 
 
-def run_program_1():
+def run_function_1():
     #
     # Function 1: Create redeem script
     #
@@ -434,19 +310,19 @@ def get_input_trx_from_utxo(priv_key_from_obj, p2sh_addr_to, seq_number_in_hex, 
     return (total_amount, utxo_set)
 
 
-def get_program2_priv_key_obj_from_conf(program2_conf_section):
+def get_function2_priv_key_obj_from_conf(function2_conf_section):
 
     priv_key_from_str = Common.get_config_value(
-        program2_conf_section, 'private_key_from')
+        function2_conf_section, 'private_key_from')
     priv_key_from_obj = PrivateKey(priv_key_from_str)
 
     return priv_key_from_obj
 
 
-def get_program2_p2pkh_addr_to_from_conf(program2_conf_section):
+def get_function2_p2pkh_addr_to_from_conf(function2_conf_section):
 
     p2pkh_addr_to_str = Common.get_config_value(
-        program2_conf_section, 'P2PKH_Addr')
+        function2_conf_section, 'P2PKH_Addr')
     p2pkh_addr_to = P2pkhAddress(p2pkh_addr_to_str)
 
     return p2pkh_addr_to
@@ -560,18 +436,18 @@ def create_spending_signed_trx(p2pkh_addr_to_str, priv_key_from_obj):
         print("\nNo UTXOs found. Nothing to do!\n")
 
 
-def run_program_2():
+def run_function_2():
     """
     Function 2
     """
     print("\nRunning Function *** 2 ***\n")
-    program2_conf_section = 'Function 2'
+    function2_conf_section = 'Function 2'
 
-    priv_key_from_obj = get_program2_priv_key_obj_from_conf(
-        program2_conf_section)
+    priv_key_from_obj = get_function2_priv_key_obj_from_conf(
+        function2_conf_section)
 
     p2pkh_addr_to_str = Common.get_config_value(
-        program2_conf_section, 'P2PKH_Addr_To')
+        function2_conf_section, 'P2PKH_Addr_To')
 
     create_spending_signed_trx(p2pkh_addr_to_str, priv_key_from_obj)
 
@@ -579,11 +455,11 @@ def run_program_2():
 def main():
     setup('testnet')
 
-    which_program = Common.get_run_function()
-    if which_program == 1:
-        run_program_1()
+    which_function = Common.get_run_function()
+    if which_function == 1:
+        run_function_1()
     else:
-        run_program_2()
+        run_function_2()
 
 
 if __name__ == "__main__":
