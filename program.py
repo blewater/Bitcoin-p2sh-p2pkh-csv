@@ -122,7 +122,6 @@ class Common:
         priv_key_obj = PrivateKey.from_wif(priv_key_str)
         pub_key_obj = priv_key_obj.get_public_key()
         pub_key_hash160 = pub_key_obj.get_address().to_hash160()
-        # print("Address: ", address_hash160)
         return pub_key_hash160
 
     @staticmethod
@@ -158,79 +157,68 @@ class Common:
             return 0
 
     @classmethod
-    def get_csv_script(cls, seq_number_in_hex, pub_key_to_obj):
+    def get_redeem_csv_script(cls, seq_number_in_hex, pub_key_to_obj):
         """
         Create the locking script for P2SH
         """
-        if len(seq_number_in_hex.replace('0', '')) > 0:
-            # Use csv operators
-            return Script([seq_number_in_hex.for_script(), 'OP_CHECKSEQUENCEVERIFY', 'OP_DROP',
-                           pub_key_to_obj.to_hex(),
-                           'OP_DUP',
-                           'OP_HASH160',
-                           pub_key_to_obj.get_address().to_hash160(),
-                           'OP_EQUALVERIFY',
-                           'OP_CHECKSIG'])
-        else:
-            # Do not use csv operations
-            return Script([pub_key_to_obj.to_hex(),
-                           'OP_DUP',
-                           'OP_HASH160',
-                           pub_key_to_obj.get_address().to_hash160(),
-                           'OP_EQUALVERIFY',
-                           'OP_CHECKSIG'])
+        hash160_to = pub_key_to_obj.get_address().to_hash160()
+
+        # Use csv operators
+        return Script([
+            seq_number_in_hex.for_script(), 
+            'OP_CHECKSEQUENCEVERIFY', 
+            'OP_DROP',
+            hash160_to,
+            'OP_DUP',
+            'OP_HASH160',
+            hash160_to,
+            'OP_EQUALVERIFY',
+            'OP_CHECKSIG'])
 
     @classmethod
-    def get_redeem_script(cls, seq_number_in_hex, pub_key_to_obj):
-
-        redeem_script = cls.get_csv_script(seq_number_in_hex, pub_key_to_obj)
-        print('\nredeem hex: ' + redeem_script.to_hex())
-
-        return redeem_script
-
-    @classmethod
-    def get_relative_time_seconds_blocks(cls):
+    def get_conf_wait_seconds(cls):
         """
-        Read conf wait params
+        Read configuration seconds wait period parameter
         """
         relative_wait_seconds_from_present_conf = cls.get_config_value(
             cls.Common_Conf_Section, 'relative_wait_512_times_val_in_seconds_from_present')
+
         relative_wait_seconds_from_present_num = cls.get_seconds_wait_period(
             relative_wait_seconds_from_present_conf)
+
+        return relative_wait_seconds_from_present_num
+
+    @classmethod
+    def get_conf_wait_blocks(cls):
+        """
+        Read configuration blocks wait parameter
+        """
         relative_blocks_to_wait = cls.get_config_value(
             cls.Common_Conf_Section, 'relative_blocks_to_wait')
+
         blocks_to_wait_conf_num = cls.get_blocks_timelock_period(
             relative_blocks_to_wait)
 
-        return (relative_wait_seconds_from_present_num, blocks_to_wait_conf_num)
-
-    @classmethod
-    def get_seq_hex_from_conf(cls, csv_args):
-        """
-        Compose sequence
-        """
-        seq_number_in_hex = cls.get_CSV_Seq_Value(
-            csv_args[0], csv_args[1])
-
-        return seq_number_in_hex
+        return blocks_to_wait_conf_num
 
     @classmethod
     def get_redeem_script_from_conf(cls, pub_key_obj):
         """
-        Great when method name are self explanatory
+        Return a P2SH address for a redemption scription encaptulating 
+            CHECKSEQUENCEVERIFY
+                +
+            P2PKH script with a paying to public address possibly locked up to
+            x blocks read from program.conf [relative_blocks_to_wait] 
         """
-        csv_args = cls.get_relative_time_seconds_blocks()
-        seq_number_in_hex = Sequence(TYPE_RELATIVE_TIMELOCK, csv_args)
+        blocks_wait = Common.get_conf_wait_blocks()
 
-        print("seconds to wait: " +
-              str(csv_args[0]) + ", blocks to wait: " + str(csv_args[1]))
-        print('sequence number in little endian format: ' + seq_number_in_hex)
+        seq_number_in_hex = Sequence(TYPE_RELATIVE_TIMELOCK, blocks_wait)
 
-        redeem_script = cls.get_redeem_script(seq_number_in_hex, pub_key_obj)
+        redeem_script = cls.get_redeem_csv_script(seq_number_in_hex, pub_key_obj)
 
         to_P2SH_addr = P2shAddress.from_script(redeem_script)
         print('Redeem script generated P2SH addr: ' +
-              to_P2SH_addr.to_address() + "\n")
+              to_P2SH_addr.to_string() + "\n")
 
         return redeem_script
 
@@ -287,11 +275,11 @@ def get_input_trx_from_utxo(priv_key_from_obj, p2sh_addr_to, seq_number_in_hex, 
     """
     Looks back up to HISTORY_TRANSACTIONS_BACK with listtransactions to find UTXO
 
-    Returns tuple, 0: Total Amount To Spend, 1: List of created TrxIn initialized objects 
+    Returns tuple, 0: Total Amount To Spend, 1: List of created TrxIn initialized objects
     from UTXO.
     """
     trx_set = btc_call(
-        'listtransactions *' + HISTORY_TRANSACTIONS_BACK + '0 "true"')
+        'listtransactions "*"' + HISTORY_TRANSACTIONS_BACK + '0 "true"')
     json_trx_set = json.loads(trx_set)
     utxo_set = []
     total_amount = 0.0
@@ -346,20 +334,18 @@ def get_trx_amount_fees(total_amount, trxin_set, p2pkh_addr_to_obj):
         trxin_set, [txout_just_for_size_calc])
 
     # https://live.blockcypher.com/btc-testnet/
-    # High Priority (1-2 blocks)	Medium Priority (3-6 blocks)	Low Priority (7+ blocks)
-    # 0.00059 BTC/KB 	0.00001 BTC/KB 	0.00001 BTC/KB
+    # High Priority (1-2 blocks)    Medium Priority (3-6 blocks)    Low Priority (7+ blocks)
+    # 0.00059 BTC/KB     0.00001 BTC/KB     0.00001 BTC/KB
     trxsize_bytes = len(tx_just_for_size_calc.serialize().encode('utf-8'))
     trx_KB = (trxsize_bytes / 1024)  # * 0.00001  # Choose Medium Fee
     trx_KB *= (1 + ESTIMATE_OF_PERCENTAGE_SIGNING_BLOAT_IN_TRX_SIZE)
     trx_fees_in_btc = trx_KB * 0.00001
     total_amount = total_amount
-    trx_amount = total_amount - trx_fees_in_btc
 
     print("Size in KB: " + str(trx_KB) + ", estimated btc fees: " +
           str(trx_fees_in_btc) + ", total amount to be transferred: " + str(total_amount) + "\n")
 
-    return trx_amount
-
+    return trx_fees_in_btc
 
 def trasmit_finalized_trx(signed_tx):
     #
@@ -383,10 +369,10 @@ def get_signed_trx(utxo_results, p2pkh_addr_to_obj, priv_key_from_obj, redeem_sc
     the single transation that transfers the btc value of the
     found UTXO transactions.
     """
-    trx_amount_minus_fees = get_trx_amount_fees(
+    trx_fees = get_trx_amount_fees(
         utxo_results[0], utxo_results[1], p2pkh_addr_to_obj)
 
-    txout = TxOutput(trx_amount_minus_fees,
+    txout = TxOutput(trx_fees,
                      p2pkh_addr_to_obj.to_script_pub_key())
 
     tx = Transaction(utxo_results[1], [txout])
@@ -412,16 +398,17 @@ def create_spending_signed_trx(p2pkh_addr_to_str, priv_key_from_obj):
 
     p2pkh_addr_to_obj = P2pkhAddress(p2pkh_addr_to_str)
 
-    seq_number_in_hex = Common.get_seq_hex_from_conf(
-        Common.get_relative_time_seconds_blocks())
+    blocks_wait = Common.get_conf_wait_blocks()
+
+    seq = Sequence(TYPE_RELATIVE_TIMELOCK, blocks_wait)
 
     redeem_script = Common.get_redeem_script_from_conf(
         get_redeem_pub_key_obj())
 
-    p2sh_paid_to_addr = P2shAddress.from_script(redeem_script).to_address()
+    p2sh_paid_to_addr = P2shAddress.from_script(redeem_script).to_string()
 
     utxo_results = get_input_trx_from_utxo(priv_key_from_obj,
-                                           p2sh_paid_to_addr, seq_number_in_hex, redeem_script)
+                                           p2sh_paid_to_addr, seq, redeem_script)
 
     # No sense in creating a transaction with 0 UTXOs
     if utxo_results[0] > 0 and len(utxo_results[1]) > 0:
@@ -455,7 +442,7 @@ def run_function_2():
 
 
 def main():
-    setup('testnet')
+    setup('regtest')
 
     which_function = Common.get_run_function()
     if which_function == 1:
